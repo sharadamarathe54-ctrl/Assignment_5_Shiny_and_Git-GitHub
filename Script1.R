@@ -40,7 +40,6 @@ dig.df <- dig.df %>%
 arm_colors <- c(Placebo = "#235a9f", Digoxin = "#be5912")
 arm_labels <- c(Placebo = "Placebo", Digoxin = "Digoxin")
 
-<<<<<<< HEAD
 # Keep all original columns; classify coded variables for exploration.
 # Unlabelled codes remain as recorded in the CSV.
 code_vars <- c("EJFMETH", "RALES", "ELEVJVP", "PEDEMA", "RESTDYS",
@@ -117,16 +116,14 @@ ui <- fluidPage(
                          tableOutput("overview"),
                          plotOutput("plot1")),
                 tabPanel("Baseline",
-                         # Add Q2 UI here
-                         h3("Question 2"),
-                         p("To be added")),
+                         h3("What participants were like at the start"),
+                         plotOutput("baseline_plot", height = "550px")),
                 tabPanel("CVD and Mortality",
                          radioButtons("q4_display", "Display", c("Percent", "Count")),
                          plotOutput("q4_plot"), tableOutput("q4_table"), textOutput("q4_p")),
                 tabPanel("Hospitalization",
-                         # Add Q5 UI here
-                         h3("Question 5"),
-                         p("To be added")),
+                         h3("Who was hospitalized during follow-up?"),
+                         plotOutput("hospitalization_plot", height = "340px")),
                 tabPanel("Monthly Risk",
                          sliderInput("q9_months", "Months", 1, 59, c(1, 59)),
                          plotOutput("q9_plot")),
@@ -142,64 +139,10 @@ ui <- fluidPage(
                          tableOutput("patient_data"),
                          downloadButton("download_data", "Download selected patients"))
               )
-=======
-# UI
-ui <- dashboardPage(
-  
-  dashboardHeader(title = "DIG Trial"),
-  
-  dashboardSidebar(
-    radioButtons(
-      inputId = "SEX",
-      label = "Filter by sex:",
-      choices = c("All", "Male", "Female"),
-      selected = "All"
-    )
-  ),
-  
-  dashboardBody(
-    
-    h2("DIG Trial Dashboard"),
-    
-    fluidRow(
-      valueBoxOutput("total", width = 4),
-      valueBoxOutput("digoxin", width = 4),
-      valueBoxOutput("placebo", width = 4)
-    ),
-    
-    fluidRow(
-      box(
-        title = "Treatment Group Distribution",
-        width = 12,
-        status = "primary",
-        solidHeader = TRUE,
-        plotOutput("plot1")
-      )
-    ),
-
-    fluidRow(
-      box(
-        title = "What participants were like at the start",
-        width = 7,
-        status = "primary",
-        solidHeader = TRUE,
-        plotOutput("baseline_plot", height = "550px",
-                   alt = "Six boxplots compare baseline measurements for the digoxin and placebo groups.")
-      ),
-      box(
-        title = "Who was hospitalized during follow-up?",
-        width = 5,
-        status = "primary",
-        solidHeader = TRUE,
-        plotOutput("hospitalization_plot", height = "340px",
-                   alt = "Two bars show the share of each treatment group hospitalized at least once.")
-      )
->>>>>>> 6308bd561648dfc913ba53b8ca1d6926c8cfbb0b
     )
   )
 )
 
-<<<<<<< HEAD
 server <- function(input, output, session) {
   # One filtered dataset for all tabs
   cohort <- reactive({
@@ -223,49 +166,47 @@ server <- function(input, output, session) {
     d
   })
   
-=======
-# Server
-server <- function(input, output) {
-  cohort <- reactive({
-    req(input$SEX)
-    if (input$SEX == "All") return(dig.df)
-    dplyr::filter(dig.df, SEX == input$SEX)
+  # Reset all global patient filters
+  observeEvent(input$reset_filters, {
+    updateCheckboxGroupInput(session, "TRTMT", selected = c("Placebo", "Digoxin"))
+    updateRadioButtons(session, "SEX", selected = "All")
+    for (var in c("RACE", "FUNCTCLS", "DIABETES", "HYPERTEN", "PREVMI")) {
+      updateSelectInput(session, var, selected = "All")
+    }
+    for (var in numeric_vars) {
+      r <- slider_limits(var)
+      if (!is.null(r)) updateSliderInput(session, var, value = r)
+    }
   })
   
-  arm_labels <- c(Placebo = "Placebo", Treatment = "Digoxin")
-  arm_colors <- c(Placebo = "#235a9f", Treatment = "#be5912")
-
-  # Total patients
-  output$total <- renderValueBox({
-    valueBox(
-      nrow(cohort()),
-      "Patients in selected cohort",
-      icon = icon("users"),
-      color = "aqua"
-    )
+  output$patient_n <- renderText({ paste("Selected patients:", nrow(cohort())) })
+  
+  output$overview_n <- renderText({
+    paste("Selected patients:", nrow(cohort()), "of", nrow(dig.df))
   })
   
-  # Digoxin treatment patients
-  output$digoxin <- renderValueBox({
-    valueBox(
-      sum(cohort()$TRTMT == "Treatment", na.rm = TRUE),
-      "Digoxin",
-      icon = icon("medkit"),
-      color = "blue"
-    )
+  output$overview <- renderTable({
+    d <- cohort()
+    validate(need(nrow(d) > 0, "No patients match the selected filters."))
+    d %>% group_by(TRTMT) %>%
+      summarise(Patients = n(), Mean_age = mean(AGE, na.rm = TRUE),
+                Mean_BMI = mean(BMI, na.rm = TRUE),
+                Mean_EF = mean(EJF_PER, na.rm = TRUE),
+                Mortality_pct = 100 * mean(DEATH == "Death", na.rm = TRUE),
+                Hospitalization_pct = 100 * mean(HOSP == "Yes", na.rm = TRUE),
+                .groups = "drop")
+  }, digits = 1)
+  
+  output$plot1 <- renderPlot({
+    d <- cohort()
+    validate(need(nrow(d) > 0, "No patients match the selected filters."))
+    ggplot(d, aes(TRTMT, fill = TRTMT)) + geom_bar() +
+      scale_fill_manual(values = arm_colors) +
+      scale_x_discrete(drop = FALSE) + theme_minimal() +
+      labs(x = "Treatment", y = "Patients")
   })
   
-  # Placebo patients
-  output$placebo <- renderValueBox({
-    valueBox(
-      sum(cohort()$TRTMT == "Placebo", na.rm = TRUE),
-      "Placebo",
-      icon = icon("user"),
-      color = "green"
-    )
-  })
-  
-  # Chart topics follow Questions 2 and 5 in the supplied Assignment 4 report.
+  # Baseline
   output$baseline_plot <- renderPlot({
     measures <- c(
       AGE = "Age (years)", BMI = "BMI (kg/m^2)",
@@ -273,13 +214,13 @@ server <- function(input, output) {
       DIABP = "Diastolic BP (mmHg)", SYSBP = "Systolic BP (mmHg)"
     )
     baseline <- cohort() %>%
-      select(TRTMT, all_of(names(measures))) %>%
+      dplyr::select(TRTMT, all_of(names(measures))) %>%
       pivot_longer(-TRTMT, names_to = "Characteristic", values_to = "Value") %>%
       filter(is.finite(Value)) %>%
       mutate(Characteristic = factor(Characteristic, levels = names(measures),
                                      labels = unname(measures)))
     validate(need(nrow(baseline) > 0, "No baseline measurements match this selection."))
-
+    
     ggplot(baseline, aes(TRTMT, Value, fill = TRTMT)) +
       geom_boxplot(alpha = 0.8, outlier.colour = "red") +
       facet_wrap(~Characteristic, scales = "free_y", ncol = 2) +
@@ -290,14 +231,52 @@ server <- function(input, output) {
       theme_minimal() +
       theme(legend.position = "none")
   })
-
+  
+  
+  
+  # CVD and mortality
+  output$q4_plot <- renderPlot({
+    d <- cohort() %>% filter(!is.na(CVD), !is.na(DEATH), !is.na(TRTMT))
+    validate(need(nrow(d) > 0, "No records match these filters."))
+    pos <- if (input$q4_display == "Percent") "fill" else "stack"
+    p <- ggplot(d, aes(CVD, fill = DEATH)) +
+      geom_bar(position = pos, width = 0.65) +
+      facet_wrap(~ TRTMT, labeller = labeller(TRTMT = arm_labels)) +
+      scale_fill_manual(values = c(Alive = "#235a9f", Death = "#be5912")) +
+      labs(x = "Cardiovascular hospitalization", y = input$q4_display, fill = "Vital status") +
+      theme_minimal()
+    if (input$q4_display == "Percent") {
+      p <- p + scale_y_continuous(labels = scales::label_percent())
+    }
+    p
+  })
+  output$q4_table <- renderTable({
+    d <- cohort() %>% filter(!is.na(CVD), !is.na(DEATH), !is.na(TRTMT))
+    validate(need(nrow(d) > 0, "No records match these filters."))
+    d %>% group_by(TRTMT, CVD) %>%
+      summarise(Patients = n(), Deaths = sum(DEATH == "Death"),
+                Mortality_pct = round(100 * Deaths / Patients, 1),
+                .groups = "drop") %>%
+      mutate(TRTMT = as.character(TRTMT))
+  }, striped = TRUE, spacing = "s", rownames = FALSE)
+  output$q4_p <- renderText({
+    d <- cohort() %>% filter(!is.na(CVD), !is.na(DEATH))
+    tab <- table(d$CVD, d$DEATH)
+    if (nrow(d) == 0 || any(rowSums(tab) == 0) || any(colSums(tab) == 0)) {
+      return("Chi-square test unavailable for this selection.")
+    }
+    paste("Overall cardiovascular hospitalization-mortality chi-square p-value for the selected patients:",
+          format.pval(suppressWarnings(chisq.test(tab)$p.value)))
+  })
+  
+  # Hospitalization
   output$hospitalization_plot <- renderPlot({
     hospital_summary <- cohort() %>%
       filter(!is.na(HOSP)) %>%
       group_by(TRTMT) %>%
       summarise(Proportion = mean(HOSP == "Yes"), .groups = "drop")
     validate(need(nrow(hospital_summary) > 0, "No hospitalization records match this selection."))
-
+    
     ggplot(hospital_summary, aes(TRTMT, Proportion, fill = TRTMT)) +
       geom_col(width = 0.6) +
       geom_text(aes(label = scales::percent(Proportion, accuracy = 0.01)), vjust = -0.5) +
@@ -310,31 +289,80 @@ server <- function(input, output) {
       theme_minimal() +
       theme(legend.position = "none")
   })
-
-  # Treatment bar chart
-  output$plot1 <- renderPlot({
-    
-    patients <- cohort()
-    validate(need(nrow(patients) > 0, "No patients match this selection."))
-    patients %>%
-      ggplot(aes(x = TRTMT, fill = TRTMT)) +
-      geom_bar(alpha = 0.4) +
-      labs(
-        x = "Randomized treatment",
-        y = "Patients in selected cohort",
-        fill = "Randomized treatment"
-      ) +
-      scale_fill_manual(
-        values = c(Placebo = "purple", Treatment = "darkgreen"),
-        breaks = c("Placebo", "Treatment"),
-        labels = c("Placebo", "Digoxin")
-      ) +
-      scale_x_discrete(labels = c(Placebo = "Placebo", Treatment = "Digoxin"))
-    
+  
+  
+  
+  # monthly mortality risk
+  # Same survival cohort for both risk plots
+  q9_data <- reactive({
+    cohort() %>% filter(is.finite(DEATHDAY), DEATHDAY >= 0, !is.na(DEATH))
+  })
+  output$q9_plot <- renderPlot({
+    d <- q9_data()
+    validate(need(nrow(d) > 1, "Not enough patients for survival analysis."))
+    monthly <- monthly_risk(d) %>%
+      filter(between(Month, input$q9_months[1], input$q9_months[2]), is.finite(Risk))
+    validate(need(nrow(monthly) > 0, "No monthly results match this selection."))
+    ggplot(monthly, aes(Month, Risk)) +
+      geom_line(color = "#235a9f", linewidth = 0.9) +
+      geom_point(color = "#235a9f", size = 1.5) +
+      labs(x = "Month", y = "Mortality risk (%)") +
+      theme_minimal()
   })
   
+  # monthly mortality risk by treatment
+  q10_data <- reactive({ q9_data() %>% filter(!is.na(TRTMT)) })
+  output$q10_plot <- renderPlot({
+    d <- q10_data()
+    validate(need(nrow(d) > 1, "Not enough patients for survival analysis."))
+    monthly <- bind_rows(lapply(unique(as.character(d$TRTMT)), function(arm) {
+      m <- monthly_risk(d[d$TRTMT == arm, , drop = FALSE])
+      m$Treatment <- rep(arm, nrow(m))
+      m
+    })) %>%
+      filter(between(Month, input$q10_months[1], input$q10_months[2]), is.finite(Risk))
+    validate(need(nrow(monthly) > 0, "No monthly results match this selection."))
+    ggplot(monthly, aes(Month, Risk, color = Treatment)) +
+      geom_line(linewidth = 0.9) + geom_point(size = 1.5) +
+      scale_color_manual(values = arm_colors, labels = arm_labels) +
+      labs(x = "Month", y = "Mortality risk (%)", color = "Treatment group") +
+      theme_minimal()
+  })
+  
+  # Explore every variable in the dataset
+  output$variable_plot <- renderPlot({
+    var <- input$variable
+    validate(need(var != "ID", "Patient IDs are shown in the table."))
+    d <- cohort() %>% filter(!is.na(.data[[var]]))
+    validate(need(nrow(d) > 0, "No available data."))
+    if (is.numeric(d[[var]])) {
+      ggplot(d, aes(TRTMT, .data[[var]], fill = TRTMT)) +
+        geom_boxplot() + scale_fill_manual(values = arm_colors) + theme_minimal()
+    } else {
+      ggplot(d, aes(.data[[var]], fill = TRTMT)) +
+        geom_bar(position = "dodge") +
+        scale_fill_manual(values = arm_colors) + theme_minimal()
+    }
+  })
+  
+  output$variable_summary <- renderPrint({
+    if (input$variable == "ID") {
+      print(n_distinct(cohort()$ID))
+    } else {
+      print(summary(cohort()[[input$variable]]))
+    }
+  })
+  
+  output$patient_data <- renderTable({
+    req(input$columns)
+    head(cohort()[, input$columns, drop = FALSE], 20)
+  })
+  
+  output$download_data <- downloadHandler(
+    filename = function() "DIG_selected.csv",
+    content = function(file) write.csv(cohort(), file, row.names = FALSE)
+  )
 }
 
-# Run app
 shinyApp(ui, server)
->>>>>>> 6308bd561648dfc913ba53b8ca1d6926c8cfbb0b
+
