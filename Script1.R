@@ -1,15 +1,9 @@
-data_file <- "DIG-1.csv"
-if (!file.exists(data_file)) {
-  stop("Place the course CSV in the project folder as DIG-1.csv, then restart the app.",
-       call. = FALSE)
-}
-
 library(shiny)
 library(tidyverse)
 library(survival)
 
 # Read the complete dataset
-dig.df <- read.csv(data_file)
+dig.df <- read.csv("C:/Users/Sharada/Downloads/DIG-1.csv")
 names(dig.df) <- trimws(names(dig.df))
 
 # Data cleaning
@@ -371,3 +365,4 @@ server <- function(input, output, session) {
 }
 
 shinyApp(ui, server)
+
